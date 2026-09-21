@@ -1,0 +1,21 @@
+services:
+  - type: worker
+    name: telegram-forwarder
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python forwarder.py
+    envVars:
+      - key: API_ID
+        sync: false
+      - key: API_HASH
+        sync: false
+      - key: SESSION_STRING
+        sync: false
+      - key: SOURCE_CHATS
+        value: "-1001234567890,-1009876543210"
+      - key: LOOKBACK_HOURS
+        value: "24"
+      - key: MAX_BACKFILL
+        value: "50"
+      - key: LOG_FILE
+        value: "forwarder.log"

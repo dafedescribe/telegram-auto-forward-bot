@@ -1,0 +1,28 @@
+# Telethon session and authentication files
+*.session
+*.session-journal
+forwarder_session.session
+
+# Environment & Secrets
+.env
+*.env
+Telegram_cred.txt
+
+# Logs
+*.log
+forwarder.log
+
+# Python / Virtual environments
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+ENV/
+
+# OS / Editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
