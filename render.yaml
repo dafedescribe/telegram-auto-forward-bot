@@ -1,7 +1,10 @@
+# Secondary option — primary runner is GitHub Actions (hourly cron).
+# Render type must be cron (one-shot backfill), not worker (would run once and exit).
 services:
-  - type: worker
+  - type: cron
     name: telegram-forwarder
     env: python
+    schedule: "0 * * * *"
     buildCommand: pip install -r requirements.txt
     startCommand: python forwarder.py
     envVars:
@@ -13,9 +16,11 @@ services:
         sync: false
       - key: SOURCE_CHATS
         value: "-1001234567890,-1009876543210"
+      - key: DESTINATION_URL
+        sync: false
       - key: LOOKBACK_HOURS
-        value: "24"
+        value: "1"
       - key: MAX_BACKFILL
         value: "50"
-      - key: LOG_FILE
-        value: "forwarder.log"
+      - key: CHUNK_SIZE
+        value: "10"

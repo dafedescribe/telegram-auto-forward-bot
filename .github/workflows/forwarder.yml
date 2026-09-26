@@ -1,0 +1,44 @@
+name: telegram-forwarder
+
+on:
+  schedule:
+    - cron: '0 * * * *'
+  workflow_dispatch:
+
+jobs:
+  forward:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Validate config (fail fast, no network)
+        run: python forwarder.py --check-config
+        env:
+          API_ID: ${{ secrets.API_ID }}
+          API_HASH: ${{ secrets.API_HASH }}
+          SESSION_STRING: ${{ secrets.SESSION_STRING }}
+          SOURCE_CHATS: ${{ secrets.SOURCE_CHATS }}
+          DESTINATION_URL: ${{ secrets.DESTINATION_URL }}
+          LOOKBACK_HOURS: '1'
+          MAX_BACKFILL: '50'
+          CHUNK_SIZE: '10'
+
+      - name: Run forwarder (one-shot backfill)
+        run: python forwarder.py
+        env:
+          API_ID: ${{ secrets.API_ID }}
+          API_HASH: ${{ secrets.API_HASH }}
+          SESSION_STRING: ${{ secrets.SESSION_STRING }}
+          SOURCE_CHATS: ${{ secrets.SOURCE_CHATS }}
+          DESTINATION_URL: ${{ secrets.DESTINATION_URL }}
+          LOOKBACK_HOURS: '1'
+          MAX_BACKFILL: '50'
+          CHUNK_SIZE: '10'
