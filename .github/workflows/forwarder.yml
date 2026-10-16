@@ -2,7 +2,7 @@ name: telegram-forwarder
 
 on:
   schedule:
-    - cron: '0 * * * *'
+    - cron: '0 12,0 * * *'
   workflow_dispatch:
 
 jobs:
@@ -27,9 +27,10 @@ jobs:
           SESSION_STRING: ${{ secrets.SESSION_STRING }}
           SOURCE_CHATS: ${{ secrets.SOURCE_CHATS }}
           DESTINATION_URL: ${{ secrets.DESTINATION_URL }}
-          LOOKBACK_HOURS: '1'
+          LOOKBACK_HOURS: '12'
           MAX_BACKFILL: '50'
           CHUNK_SIZE: '10'
+          REMOTE_ONLY: '1'
 
       - name: Run forwarder (one-shot backfill)
         run: python forwarder.py
@@ -39,6 +40,7 @@ jobs:
           SESSION_STRING: ${{ secrets.SESSION_STRING }}
           SOURCE_CHATS: ${{ secrets.SOURCE_CHATS }}
           DESTINATION_URL: ${{ secrets.DESTINATION_URL }}
-          LOOKBACK_HOURS: '1'
+          LOOKBACK_HOURS: '12'
           MAX_BACKFILL: '50'
           CHUNK_SIZE: '10'
+          REMOTE_ONLY: '1'

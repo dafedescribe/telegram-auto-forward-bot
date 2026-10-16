@@ -3,7 +3,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from forwarder import chunk_messages, has_email, parse_source_chats, validate_config
+from forwarder import chunk_messages, has_email, is_remote, parse_source_chats, validate_config
 
 
 class FakeMsg:
@@ -59,3 +59,44 @@ def test_validate_config_accepts_good_env():
 
 def test_chunk_messages_splits():
     assert chunk_messages([1, 2, 3, 4, 5], 2) == [[1, 2], [3, 4], [5]]
+
+
+def test_is_remote_detects_remote_signals():
+    assert is_remote("Fully Remote role, apply to jobs@example.com") is True
+    assert is_remote("Location: #Remote (based in Nigeria)") is True
+    assert is_remote("Overseas / Remote (Fixed-term Contract)") is True
+    assert is_remote("WFH opportunity, work from home") is True
+
+
+def test_is_remote_includes_hybrid():
+    assert is_remote("Hybrid working, 2 days on-site") is True
+
+
+def test_is_remote_rejects_onsite_and_noise():
+    assert is_remote("Location: Lekki, Lagos. Full-Time on-site") is False
+    assert is_remote("virtual classroom platforms (Zoom, Teams)") is False
+    assert is_remote("Personal Drivers needed around Ipaja") is False
+    assert is_remote("") is False
+
+
+def test_validate_config_parses_remote_only():
+    env = {
+        "API_ID": "12345",
+        "API_HASH": "abcdef123456",
+        "SESSION_STRING": "dummy",
+        "SOURCE_CHATS": "-100123,-100456",
+        "DESTINATION_URL": "https://example.com/webhook",
+        "REMOTE_ONLY": "1",
+    }
+    assert validate_config(env)["remote_only"] is True
+
+
+def test_validate_config_remote_only_defaults_off():
+    env = {
+        "API_ID": "12345",
+        "API_HASH": "abcdef123456",
+        "SESSION_STRING": "dummy",
+        "SOURCE_CHATS": "-100123,-100456",
+        "DESTINATION_URL": "https://example.com/webhook",
+    }
+    assert validate_config(env)["remote_only"] is False

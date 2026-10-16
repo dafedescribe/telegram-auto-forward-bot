@@ -4,7 +4,7 @@ services:
   - type: cron
     name: telegram-forwarder
     env: python
-    schedule: "0 * * * *"
+    schedule: "0 12,0 * * *"
     buildCommand: pip install -r requirements.txt
     startCommand: python forwarder.py
     envVars:
@@ -15,12 +15,14 @@ services:
       - key: SESSION_STRING
         sync: false
       - key: SOURCE_CHATS
-        value: "-1001234567890,-1009876543210"
+        value: "-1001387688762,-1002651854750,-1001481661569,-1001277380845,-1001276073955,-1002182370479,-1001426788124,-1001347648716,-1002806566801,-1001608123474,-1001590144341,-1002319764290,-1001658509318"
       - key: DESTINATION_URL
-        sync: false
+        value: "https://dafe.pikapod.net/webhook/4be2d0a1-8759-44a2-bb50-5a7fa15f6749"
       - key: LOOKBACK_HOURS
-        value: "1"
+        value: "12"
       - key: MAX_BACKFILL
         value: "50"
       - key: CHUNK_SIZE
-        value: "10"
+        value: "200"
+      - key: REMOTE_ONLY
+        value: "1"

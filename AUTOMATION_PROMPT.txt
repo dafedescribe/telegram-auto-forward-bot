@@ -1,0 +1,39 @@
+You are building a "Telegram remote-job hunter" automation from scratch. Rebuild the base exactly as specified below.
+
+# PIPELINE OVERVIEW
+Telegram (13 job channels) → Python backfill bot (email filter + remote filter) → n8n webhook → Cloudflare Workers AI extraction → Airtable table.
+
+# 1. TELEGRAM BOT (Python, Telethon user session)
+- One-shot script (not a daemon): fetch recent messages from SOURCE_CHATS, filter, POST JSON to webhook, exit.
+- Env vars: API_ID, API_HASH, SESSION_STRING (Telethon StringSession from my.telegram.org), SOURCE_CHATS (comma-separated numeric IDs), DESTINATION_URL (n8n webhook URL), LOOKBACK_HOURS=1, MAX_BACKFILL=50, CHUNK_SIZE=200, REMOTE_ONLY=1.
+- Two filters, applied in order:
+  1. EMAIL: keep messages whose text/caption matches regex [a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}
+  2. REMOTE (only when REMOTE_ONLY=1): keep messages matching regex \bremote\b|work\s*from\s*home|work-from-home|\bwfh\b|telecommut|\bhybrid\b (case-insensitive). Bare "virtual" must NOT count.
+- Serialize each kept message to: {chat_id, chat_title, message_id, text, date, sender:{id,name}}.
+- POST the whole batch as one JSON array to DESTINATION_URL. Retry 3x with backoff on failure. Exit codes: 0 ok, 1 send/runtime failure, 2 config error.
+- CLI flags: --check-config (validate env, no network), --dry-run (fetch+log only), --list-groups (print dialogs to find chat IDs), --export-session (interactive login → prints SESSION_STRING).
+
+# 2. N8N WORKFLOW (test URL: /webhook-test/<uuid>, prod: /webhook/<uuid>)
+Nodes in order:
+1. Webhook — POST, path = uuid.
+2. Split Out — fieldToSplitOut: "body" (bot posts one JSON array).
+3. Code "Prepare Job" — extract first email from text via regex into email_hint; build link https://t.me/c/<chat_id minus "-100">/<message_id>; truncate text to 4000 chars.
+4. HTTP Request → Cloudflare Workers AI chat completions endpoint (account-scoped /ai/v1/chat/completions, model @cf/meta/llama-3.2-3b-instruct, Bearer API token). System prompt: "You extract job posting data. Reply with ONLY a valid JSON object, no markdown fences. Fields: employer, role, responsibilities, qualifications, salary, location, employment_type, email — all string or null."
+5. Code "Parse AI Output" — parse choices[0].message.content (strip ``` fences, try/catch → parse_error field on failure); merge with chat metadata + email_hint fallback.
+6. Append to Airtable — Personal Access Token credential (scopes data.records:write), table "Jobs", mappingMode defineBelow.
+
+# 3. AIRTABLE TABLE "Jobs"
+Fields: Name (primary, = Role || Employer || Message ID), Date, Chat, Employer, Role, Responsibilities, Qualifications, Salary, Location, Employment Type, Email, Link, Message ID. Text fields are fine.
+
+# SOURCE CHATS (job-related channels, numeric IDs)
+-1001387688762,-1002651854750,-1001481661569,-1001277380845,-1001276073955,-1002182370479,-1001426788124,-1001347648716,-1002806566801,-1001608123474,-1001590144341,-1002319764290,-1001658509318
+
+# SCHEDULING
+Primary: GitHub Actions cron "0 * * * *" with secrets API_ID, API_HASH, SESSION_STRING, SOURCE_CHATS, DESTINATION_URL and LOOKBACK_HOURS=1. Secondary: Render cron. One-shot job per run, never a long-running worker.
+
+# CONSTRAINTS
+- Never commit .env, SESSION_STRING, or API tokens. Session files (*.session) gitignored.
+- User account via Telethon (bots cannot read group messages).
+- Only forward content the account legitimately has access to.
+
+Build the bot, the n8n workflow JSON, and the Airtable schema. Test in this order: --check-config → --list-groups → --dry-run → live POST to test webhook → activate prod webhook.

@@ -1,0 +1,199 @@
+{
+  "name": "Telegram Jobs → Structured Sheet",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "4be2d0a1-8759-44a2-bb50-5a7fa15f6749",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.2,
+      "position": [0, 0],
+      "id": "477b37b4-3b65-45f1-8972-800d79200be2",
+      "name": "Webhook",
+      "webhookId": "4be2d0a1-8759-44a2-bb50-5a7fa15f6749"
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "body",
+        "options": {}
+      },
+      "name": "Split Out Jobs",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [200, 0],
+      "id": "1f0a1a00-0000-4000-8000-000000000002"
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all().map(item => {\n  const m = item.json;\n  const full = m.text || '';\n  const emailMatch = full.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}/);\n  const link = 'https://t.me/c/' + String(m.chat_id).replace('-100', '') + '/' + m.message_id;\n  return {\n    json: {\n      date: m.date,\n      chat_id: m.chat_id,\n      message_id: m.message_id,\n      chat_title: m.chat_title,\n      link,\n      email_hint: emailMatch ? emailMatch[0] : '',\n      text: full.slice(0, 4000)\n    }\n  };\n});"
+      },
+      "name": "Prepare Job",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [400, 0],
+      "id": "1f0a1a00-0000-4000-8000-000000000003"
+    },
+    {
+      "parameters": {
+        "resource": "record",
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "value": "apph3pXlmooMaNUz7",
+          "mode": "list",
+          "cachedResultName": "Remote Job Tracker",
+          "cachedResultUrl": "https://airtable.com/apph3pXlmooMaNUz7"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblS5d6qFmVH50ljm",
+          "mode": "list",
+          "cachedResultName": "Jobs",
+          "cachedResultUrl": "https://airtable.com/apph3pXlmooMaNUz7/tblS5d6qFmVH50ljm"
+        },
+        "returnAll": true,
+        "options": {}
+      },
+      "name": "Get Existing IDs",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [560, 120],
+      "id": "1f0a1a00-0000-4000-8000-000000000006",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "1kpJSXmO7EyC0jbU",
+          "name": "Airtable Personal Access Token account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "let existing = [];\ntry {\n  existing = $('Get Existing IDs').all();\n} catch (e) {\n  existing = [];\n}\nconst seen = new Set();\nfor (const r of existing) {\n  const j = r.json || {};\n  const id = j['Message ID'] || (j.fields && j.fields['Message ID']);\n  if (id) seen.add(String(id));\n}\nconst SYSTEM_PROMPT = 'You extract job posting data. Reply with ONLY a valid JSON object, no markdown fences, no commentary. Fields: employer (string|null), role (string|null), responsibilities (string, short summary|null), qualifications (string, short summary|null), salary (string|null), salary_numeric (number|null — parse salary to plain monthly number in original currency, e.g. 150000 for N150,000/month; null if absent or unclear), location (string|null), employment_type (string, one of: Full-Time, Part-Time, Contract, Internship, Freelance; null if absent), email (string|null). Use null when a field is absent.';\nconst kept = [];\nfor (const item of $input.all()) {\n  const mid = String(item.json.chat_id) + '_' + String(item.json.message_id);\n  if (seen.has(mid)) continue;\n  seen.add(mid);\n  const body = {\n    model: '@cf/meta/llama-3.2-3b-instruct',\n    messages: [\n      { role: 'system', content: SYSTEM_PROMPT },\n      { role: 'user', content: item.json.text || '' }\n    ]\n  };\n  kept.push({\n    json: Object.assign({}, item.json, { aiBody: JSON.stringify(body) })\n  });\n}\nreturn kept;"
+      },
+      "name": "Dedupe",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [720, 0],
+      "id": "1f0a1a00-0000-4000-8000-000000000007"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.cloudflare.com/client/v4/accounts/50fab3a2861040c017ca39860eb72eca/ai/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer REPLACE_ME_CLOUDFLARE_TOKEN"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.aiBody }}",
+        "options": {}
+      },
+      "name": "Cloudflare Workers AI",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [620, 0],
+      "id": "9b7b518f-71ce-4058-aedc-26c9c39a4fd3"
+    },
+    {
+      "parameters": {
+        "jsCode": "const preps = $('Prepare Job').all();\nconst asText = v => v == null || v === '' ? null : (typeof v === 'string' ? v.trim() : JSON.stringify(v));\nreturn $input.all().map((item, i) => {\n  const raw = (item.json.choices && item.json.choices[0] && item.json.choices[0].message && item.json.choices[0].message.content) || '';\n  let extracted = {};\n  try {\n    extracted = JSON.parse(raw.replace(/```json|```/g, '').trim());\n  } catch (e) {\n    extracted = { parse_error: raw.slice(0, 200) };\n  }\n  const prev = preps[i] ? preps[i].json : {};\n  let dateIso = null;\n  try { dateIso = prev.date ? new Date(prev.date).toISOString().slice(0, 19) + 'Z' : null; } catch (e) { dateIso = null; }\n  const EMP_TYPES = ['Full-Time', 'Part-Time', 'Contract', 'Internship', 'Freelance'];\n  return {\n    json: {\n      Date: dateIso,\n      Chat: asText(prev.chat_title),\n      Employer: asText(extracted.employer),\n      Role: asText(extracted.role),\n      Responsibilities: asText(extracted.responsibilities),\n      Qualifications: asText(extracted.qualifications),\n      Salary: asText(extracted.salary),\n      'Salary (Numeric)': typeof extracted.salary_numeric === 'number' && isFinite(extracted.salary_numeric) ? extracted.salary_numeric : null,\n      Location: asText(extracted.location),\n      'Employment Type': EMP_TYPES.includes(extracted.employment_type) ? extracted.employment_type : null,\n      Email: asText(extracted.email) || asText(prev.email_hint),\n      Link: asText(prev.link),\n      'Message ID': prev.chat_id != null ? String(prev.chat_id) + '_' + String(prev.message_id) : null,\n      ParseError: asText(extracted.parse_error) || ''\n    }\n  };\n});"
+      },
+      "name": "Parse AI Output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [860, 0],
+      "id": "1f0a1a00-0000-4000-8000-000000000004"
+    },
+    {
+      "name": "Append to Airtable",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [1100, 0],
+      "id": "954f9ec3-de95-4d71-9b5b-451cd2ad6cf7",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "1kpJSXmO7EyC0jbU",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
+      "parameters": {
+        "operation": "create",
+        "base": {
+          "__rl": true,
+          "value": "apph3pXlmooMaNUz7",
+          "mode": "list",
+          "cachedResultName": "Remote Job Tracker",
+          "cachedResultUrl": "https://airtable.com/apph3pXlmooMaNUz7"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblS5d6qFmVH50ljm",
+          "mode": "list",
+          "cachedResultName": "Jobs",
+          "cachedResultUrl": "https://airtable.com/apph3pXlmooMaNUz7/tblS5d6qFmVH50ljm"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Name": "={{ $json.Role || $json.Employer || $json['Message ID'] }}",
+            "Date": "={{ $json.Date }}",
+            "Chat": "={{ $json.Chat }}",
+            "Employer": "={{ $json.Employer }}",
+            "Role": "={{ $json.Role }}",
+            "Responsibilities": "={{ $json.Responsibilities }}",
+            "Qualifications": "={{ $json.Qualifications }}",
+            "Salary": "={{ $json.Salary }}",
+            "Salary (Numeric)": "={{ $json['Salary (Numeric)'] }}",
+            "Location": "={{ $json.Location }}",
+            "Employment Type": "={{ $json['Employment Type'] }}",
+            "Email": "={{ $json.Email }}",
+            "Link": "={{ $json.Link }}",
+            "Message ID": "={{ $json['Message ID'] }}"
+          },
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {
+          "typecast": true
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [[{ "node": "Split Out Jobs", "type": "main", "index": 0 }]]
+    },
+    "Split Out Jobs": {
+      "main": [[{ "node": "Prepare Job", "type": "main", "index": 0 }]]
+    },
+    "Prepare Job": {
+      "main": [[{ "node": "Get Existing IDs", "type": "main", "index": 0 }]]
+    },
+    "Get Existing IDs": {
+      "main": [[{ "node": "Dedupe", "type": "main", "index": 0 }]]
+    },
+    "Dedupe": {
+      "main": [[{ "node": "Cloudflare Workers AI", "type": "main", "index": 0 }]]
+    },
+    "Cloudflare Workers AI": {
+      "main": [[{ "node": "Parse AI Output", "type": "main", "index": 0 }]]
+    },
+    "Parse AI Output": {
+      "main": [[{ "node": "Append to Airtable", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "pinData": {}
+}

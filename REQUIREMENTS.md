@@ -34,6 +34,9 @@ python forwarder.py                   # real backfill + POST
 - `SOURCE_CHATS` — comma-separated numeric IDs, e.g. `-100123,-100456` (required)
 - `DESTINATION_URL` — `https://…` webhook (required)
 - `LOOKBACK_HOURS=24`, `MAX_BACKFILL=50`, `CHUNK_SIZE=10`, `LOG_FILE=` (optional)
+- `REMOTE_ONLY=1` — forward only remote/hybrid roles (matches `remote`,
+  `work from home`, `WFH`, `telecommute`, `hybrid`); `0` forwards everything
+  with an email (optional, default `0`)
 
 Exit codes: `0` ok, `2` config error, `1` runtime/send failure.
 

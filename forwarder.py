@@ -7,12 +7,27 @@ from datetime import datetime, timedelta, timezone
 from urllib.parse import urlparse
 
 EMAIL_RE = re.compile(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}")
+REMOTE_RE = re.compile(r"\bremote\b|work\s*from\s*home|work-from-home|\bwfh\b|telecommut", re.IGNORECASE)
+HYBRID_RE = re.compile(r"\bhybrid\b", re.IGNORECASE)
+
+
+def _message_text(msg) -> str:
+    return (getattr(msg, "text", None) or getattr(msg, "message", None)) or ""
 
 
 def has_email(msg) -> bool:
     """Return True if the message text or caption contains an email address."""
-    content = (getattr(msg, "text", None) or getattr(msg, "message", None)) or ""
-    return bool(EMAIL_RE.search(content))
+    return bool(EMAIL_RE.search(_message_text(msg)))
+
+
+def is_remote(msg_or_text) -> bool:
+    """Return True if the text signals a remote (or hybrid) role.
+
+    Strict on purpose: bare 'virtual' is excluded ('virtual classroom'
+    skills, 'Virtual Assistant' titles with a physical location).
+    """
+    text = msg_or_text if isinstance(msg_or_text, str) else _message_text(msg_or_text)
+    return bool(REMOTE_RE.search(text or "") or HYBRID_RE.search(text or ""))
 
 
 def parse_source_chats(raw: str) -> set:
@@ -92,6 +107,9 @@ def validate_config(env=None) -> dict:
 
     log_file = (src.get("LOG_FILE") or os.environ.get("LOG_FILE") or "").strip() or None
 
+    remote_raw = (src.get("REMOTE_ONLY") or os.environ.get("REMOTE_ONLY") or "").strip().lower()
+    remote_only = remote_raw in ("1", "true", "yes")
+
     return {
         "api_id": api_id,
         "api_hash": api_hash,
@@ -102,6 +120,7 @@ def validate_config(env=None) -> dict:
         "max_backfill": max_backfill,
         "chunk_size": chunk_size,
         "log_file": log_file,
+        "remote_only": remote_only,
     }
 
 
@@ -195,6 +214,11 @@ async def fetch_recent(client, cfg: dict) -> dict:
                 logging.info("No recent messages in %s", chat_id)
                 continue
             msgs = [m for m in msgs if has_email(m)]
+            if cfg.get("remote_only"):
+                before = len(msgs)
+                msgs = [m for m in msgs if is_remote(m)]
+                logging.info("Remote filter: %d/%d with email kept in %s",
+                             len(msgs), before, chat_id)
             if not msgs:
                 logging.info("No messages with email in %s", chat_id)
                 continue
@@ -241,9 +265,9 @@ async def export_session() -> None:
 
 def log_startup(cfg: dict) -> None:
     host = urlparse(cfg["destination_url"]).netloc
-    logging.info("Config OK: %d chat(s), lookback=%dh, max_backfill=%d, chunk=%d, dest=%s",
+    logging.info("Config OK: %d chat(s), lookback=%dh, max_backfill=%d, chunk=%d, dest=%s, remote_only=%s",
                  len(cfg["source_chats"]), cfg["lookback_hours"],
-                 cfg["max_backfill"], cfg["chunk_size"], host)
+                 cfg["max_backfill"], cfg["chunk_size"], host, cfg.get("remote_only"))
 
 
 async def run_main(dry_run: bool = False) -> int:
@@ -280,7 +304,8 @@ def check_config() -> int:
         return 2
     print(f"Config OK: {len(cfg['source_chats'])} chat(s), "
           f"lookback={cfg['lookback_hours']}h, max_backfill={cfg['max_backfill']}, "
-          f"chunk={cfg['chunk_size']}, dest={urlparse(cfg['destination_url']).netloc}")
+          f"chunk={cfg['chunk_size']}, dest={urlparse(cfg['destination_url']).netloc}, "
+          f"remote_only={cfg.get('remote_only')}")
     return 0
 
 

@@ -1,0 +1,17 @@
+Create an Airtable base for tracking remote job listings scraped from Telegram. It needs one table named "Jobs" with these fields:
+
+1. Name — Single line text (primary field). Will hold "Role @ Employer".
+2. Date — Date (include time).
+3. Chat — Single line text. Source Telegram channel name.
+4. Employer — Single line text. Company or hiring org name.
+5. Role — Single line text. Job title.
+6. Responsibilities — Long text. Short summary of duties.
+7. Qualifications — Long text. Short summary of requirements.
+8. Salary — Single line text. As posted (e.g. "₦150,000/month").
+9. Location — Single line text. City/country or "Remote".
+10. Employment Type — Single select: Full-Time, Part-Time, Contract, Internship, Freelance.
+11. Email — Email. Contact email for applications.
+12. Link — URL. Original Telegram post.
+13. Message ID — Single line text (unique key for dedupe).
+
+Add a view grouping by Employment Type, and a second view filtering Location = Remote.
